@@ -1,0 +1,75 @@
+import sys
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+from awsglue.job import Job
+import logging
+
+logger = logging.getLogger('my_logger')
+logger.setLevel(logging.INFO)
+
+#Create handler for CloudWatch
+
+handler = logging.StreamHandler()
+handler.setLevel(logging.INFO)
+logger.addHandler(handler)
+
+logger.INFO('My log Message')
+
+args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+sc = SparkContext()
+glueContext = GlueContext(sc)
+spark = glueContext.spark_session
+job = Job(glueContext)
+job.init(args['JOB_NAME'], args)
+
+# Script generated for node AWS Glue Data Catalog
+AWSGlueDataCatalog_node1717476080616 = glueContext.create_dynamic_frame.from_catalog(database="myetldatabase", table_name="products", transformation_ctx="AWSGlueDataCatalog_node1717476080616")
+
+# Script generated for node Change Schema
+ChangeSchema_node1717476084163 = ApplyMapping.apply(frame=AWSGlueDataCatalog_node1717476080616, mappings=[("marketplace", "string", "new_marketplace", "string"), ("customer_id", "long", "new_customer_id", "long"), ("product_id", "string", "new_product_id", "string"), ("seller_id", "string", "new_seller_id", "string"), ("sell_date", "string", "new_sell_date", "string"), ("quantity", "long", "new_quantity", "long"), ("year", "string", "new_year", "string")], transformation_ctx="ChangeSchema_node1717476084163")
+
+#Convetr the string value into long values using resolvechoice cast:long
+
+
+ResolveChoice_node = ApplyMapping_node2.resolvechoice(specs = [('new_seller_id','cast:long']),
+transformation_ctx = "ResolveChoice_node"
+
+logger.info('print schema for ResolveChoice_node')
+ResolveChoice_node.printSchema()
+
+#convert dynamic dataframe into spark dataframe
+
+logger.info('Convert dynamic dataframe ResolveChoice_node into Spark dataframe')
+spark_data_frame = ResolveChoice_node.toDF()
+
+#apply the where clause in the spark_data_frame
+
+logger.info('filter row where seller_id is not null')
+spark_data_frame = spark_data_frame.where("new_seller_id is NOT NULL")
+
+#Add new column to the dataframe
+
+logger.info('create new column status with Active Value')
+spark_data_frame_filter = spark_data_frame.withColumn("new_status",lit("Active"))
+spark_data_frame_filter.show()
+
+logger.info('Convert spark datafeame into table view product_view, so that we can run the sql')
+spark_data_frame_filter.createOrReplaceTempView("product_view")
+
+logger.info('create dataframe by spark sql')
+product_sql_df = spark.sql("SELECT new_year, count(new_customer_id) as cnt, sum(new_quantity) as qty FROM product_view group by new_year")
+
+logger.info('display records after aggregated result')
+product_sql_df.show()
+
+#convert the dataframe back to a dynamic frame
+
+logger.info('convert spark dataframe to the dynamic frame')
+dynamic_frame = DynamicFrame.fromDF(product_sql_df, glueContext, "dynamic_frame")
+
+# Script generated for node Amazon S3
+AmazonS3_node1717476087920 = glueContext.write_dynamic_frame.from_options(frame=ChangeSchema_node1717476084163, connection_type="s3", format="glueparquet", connection_options={"path": "s3://myetldemo2024/output/", "partitionKeys": []}, format_options={"compression": "snappy"}, transformation_ctx="AmazonS3_node1717476087920")
+
+job.commit()
